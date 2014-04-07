@@ -15,6 +15,7 @@ public class BotStarter implements Bot {
 	public final static double PANIC_RATE = 0.3;	
 	
 	public final static int WORLD_DOMINANCE_LIMIT = 32;
+	public final static int SUPERPOWER_TROOP_LIMIT = 100;
 	private static int ownedRegions;
 
 	/**
@@ -120,7 +121,19 @@ public class BotStarter implements Bot {
 		ownedRegions = ownedRegionCount;
 	}
 	
+	private boolean havePowerfulNeighbor(Region r, String myName) {
+		List<Region> neighbors = r.getNeighbors();
 
+		int i = 0;
+		boolean res = false;
+
+		while ((i < neighbors.size()) && !res) {
+			res = (neighbors.get(i).ownedByPlayer(myName) && (neighbors.get(i).getArmies() > SUPERPOWER_TROOP_LIMIT));
+			i++;
+		}
+
+		return res;	
+	}
 
 
 	@Override
@@ -249,15 +262,29 @@ public class BotStarter implements Bot {
 			if(fromRegion.ownedByPlayer(myName)) {
 
 				for (Region toRegion : neighbors) {	
-					if (!toRegion.ownedByPlayer(myName) && 
-							toRegion.getArmies() < ((int) fromRegion.getArmies() * SUPERIORITY_RATE)) {
+					int neighborTroops = toRegion.getArmies();
+					int presentTroops = fromRegion.getArmies();
+					if (!toRegion.ownedByPlayer(myName) && (presentTroops > 2) && 
+							(neighborTroops < ((int) presentTroops * SUPERIORITY_RATE))) {
 						attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, toRegion, (int) (fromRegion.getArmies() * ATTACK_RATE)));
 					} 
 				}				
 			}
 
+			// Kamikaze attack to destroy enemy strong defenses
+			if(fromRegion.ownedByPlayer(myName) && (fromRegion.getArmies() > SUPERPOWER_TROOP_LIMIT)) {
+
+				for (Region toRegion : neighbors) {	
+					if (!toRegion.ownedByPlayer(myName) && 
+							(toRegion.getArmies() > SUPERPOWER_TROOP_LIMIT) && havePowerfulNeighbor(fromRegion, myName)) {
+						attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, toRegion, fromRegion.getArmies()-1));
+					} 
+				}				
+			}
+
+			
 			/* Transfers from safe regions to unsafe regions */
-			if(fromRegion.ownedByPlayer(myName) && isSafe(fromRegion, myName)) {
+			if((ownedRegions < WORLD_DOMINANCE_LIMIT) && fromRegion.ownedByPlayer(myName) && isSafe(fromRegion, myName)) {
 
 				List<Region> unsafeNeighbors = new ArrayList<Region>();
 				int transferrableTroops = fromRegion.getArmies() - 1;
@@ -274,8 +301,8 @@ public class BotStarter implements Bot {
 
 					// TODO We might improve this, distributing more troops to more weak endangered neighbors
 					/* Dividing equally between unsafe neighbors */
-					if ((unsafeNeighbors.size() > 0) && (ownedRegions < WORLD_DOMINANCE_LIMIT)) {	
-						troopChunk = (int) (transferrableTroops / neighbors.size());
+					if ((unsafeNeighbors.size() > 0)) {	
+						troopChunk = (int) (transferrableTroops / unsafeNeighbors.size());
 						if (troopChunk > 0) {
 							for (Region toRegion : unsafeNeighbors) {
 								attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, toRegion, troopChunk));
