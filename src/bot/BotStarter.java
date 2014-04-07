@@ -13,6 +13,9 @@ public class BotStarter implements Bot {
 	public final static double SUPERIORITY_RATE = 0.6;	
 	public final static double ATTACK_RATE = 0.7;	
 	public final static double PANIC_RATE = 0.3;	
+	
+	public final static int WORLD_DOMINANCE_LIMIT = 32;
+	private static int ownedRegions;
 
 	/**
 	 * A method used at the start of the game to decide which player start with what Regions. 6 Regions are required to be returned.
@@ -104,6 +107,19 @@ public class BotStarter implements Bot {
 		return troopDifferences;
 
 	}
+	
+	private void countOwnedRegions(List<Region> visibleRegions, String myName) {
+		int ownedRegionCount = 0;
+		
+		for (Region r : visibleRegions) {
+			if (r.ownedByPlayer(myName)) {
+				ownedRegionCount++;
+			}
+		}
+	
+		ownedRegions = ownedRegionCount;
+	}
+	
 
 
 
@@ -121,15 +137,15 @@ public class BotStarter implements Bot {
 		int initialTroops = state.getStartingArmies();
 		int armiesLeft = initialTroops;
 		List<Region> visibleRegions = state.getVisibleMap().getRegions();
-		List<Region> myRegions = new ArrayList<Region>();
+		List<Region> fortifiableRegions = new ArrayList<Region>();
 
 		for (Region r : visibleRegions) {
-			if (r.ownedByPlayer(myName)) {
-				myRegions.add(r);
+			if (r.ownedByPlayer(myName) && !isSafe(r, myName)) {
+				fortifiableRegions.add(r);
 			}
 		}
 
-		List<RegionAdvantage> neighborAdvantages = computeTroopDifferences(myRegions, myName);
+		List<RegionAdvantage> neighborAdvantages = computeTroopDifferences(fortifiableRegions, myName);
 		
 		/*
 		 *  Take negative advantages (first ones in the list) and reinforce them
@@ -199,7 +215,10 @@ public class BotStarter implements Bot {
 
 		ArrayList<AttackTransferMove> attackTransferMoves = new ArrayList<AttackTransferMove>();
 		String myName = state.getMyPlayerName();
-
+		List<Region> visibleRegions = state.getVisibleMap().getRegions();
+		
+		countOwnedRegions(visibleRegions, myName);
+		
 		for(Region fromRegion : state.getVisibleMap().getRegions()) {
 
 			// Panic mode and attacking moves
@@ -231,13 +250,11 @@ public class BotStarter implements Bot {
 
 				for (Region toRegion : neighbors) {	
 					if (!toRegion.ownedByPlayer(myName) && 
-							toRegion.getArmies() <= ((int) fromRegion.getArmies() * SUPERIORITY_RATE)) {
+							toRegion.getArmies() < ((int) fromRegion.getArmies() * SUPERIORITY_RATE)) {
 						attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, toRegion, (int) (fromRegion.getArmies() * ATTACK_RATE)));
 					} 
 				}				
 			}
-
-			// TODO Conquer SuperRegion
 
 			/* Transfers from safe regions to unsafe regions */
 			if(fromRegion.ownedByPlayer(myName) && isSafe(fromRegion, myName)) {
@@ -257,7 +274,7 @@ public class BotStarter implements Bot {
 
 					// TODO We might improve this, distributing more troops to more weak endangered neighbors
 					/* Dividing equally between unsafe neighbors */
-					if (unsafeNeighbors.size() > 0) {	
+					if ((unsafeNeighbors.size() > 0) && (ownedRegions < WORLD_DOMINANCE_LIMIT)) {	
 						troopChunk = (int) (transferrableTroops / neighbors.size());
 						if (troopChunk > 0) {
 							for (Region toRegion : unsafeNeighbors) {
