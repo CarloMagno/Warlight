@@ -70,7 +70,7 @@ public class BotStarter implements Bot {
 		boolean res = true;
 
 		while ((i < neighbors.size()) && res) {
-			res = (! neighbors.get(i).ownedByPlayer(me));
+			res = (neighbors.get(i).ownedByPlayer(me));
 			i++;
 		}
 
@@ -105,13 +105,16 @@ public class BotStarter implements Bot {
 
 	}
 
+
+
 	@Override
 	/**
 	 * This method is called for at first part of each round. This bot gives priority to the borderline 
 	 * outnumbered territories. Strongest neighbor criterion.
 	 * @return The list of PlaceArmiesMoves for one round
 	 */
-	public ArrayList<PlaceArmiesMove> getPlaceArmiesMoves(BotState state, Long timeOut) {
+	public ArrayList<PlaceArmiesMove> getPlaceArmiesMoves(BotState state, Long timeOut) 
+	{
 
 		ArrayList<PlaceArmiesMove> placeArmiesMoves = new ArrayList<PlaceArmiesMove>();
 		String myName = state.getMyPlayerName();
@@ -120,8 +123,6 @@ public class BotStarter implements Bot {
 		List<Region> visibleRegions = state.getVisibleMap().getRegions();
 		List<Region> myRegions = new ArrayList<Region>();
 
-		System.err.println("-----------NEW ROUND");
-		
 		for (Region r : visibleRegions) {
 			if (r.ownedByPlayer(myName)) {
 				myRegions.add(r);
@@ -129,11 +130,12 @@ public class BotStarter implements Bot {
 		}
 
 		List<RegionAdvantage> neighborAdvantages = computeTroopDifferences(myRegions, myName);
-
-		for (RegionAdvantage ra : neighborAdvantages) {
-			System.err.println(ra);
-		}
 		
+		System.err.print("La lista ordenada es:");
+		for (RegionAdvantage ra : neighborAdvantages) {
+			System.err.print(ra);	
+		}
+		System.err.println();			
 		/*
 		 *  Take negative advantages (first ones in the list) and reinforce them
 		 *  (the greater the disadvantage is, the higher the help is!)
@@ -141,13 +143,14 @@ public class BotStarter implements Bot {
 
 		/* Rate calculation and assign such troop percentages to the endangered regions */
 		int negativeAdvantageOverall = 0;
-		int worstDifferenceRegionIndex = 0;
 		int ind = 0;
 
 		while ((ind < neighborAdvantages.size()) && (neighborAdvantages.get(ind).getDifference() < 0)) {
-			negativeAdvantageOverall -= neighborAdvantages.get(ind).getDifference();
+			negativeAdvantageOverall += neighborAdvantages.get(ind).getDifference();
 			ind++;
 		}
+
+		System.err.println("Indice: " + ind + "; Neg Adv: " + negativeAdvantageOverall);
 
 		// Variables for fair troop assignments
 		float troopRate;
@@ -156,12 +159,12 @@ public class BotStarter implements Bot {
 		// If there are disadvantages... reinforce them
 		if (negativeAdvantageOverall < 0) {
 
-			for (int i = 0; i < neighborAdvantages.size(); i++) {
+			for (int i = 0; i < ind; i++) {
 				if (neighborAdvantages.get(i).getDifference() < 0) {
 					troopRate = neighborAdvantages.get(i).getDifference() / (float) negativeAdvantageOverall; 
 					destinedTroops = (int) (initialTroops * troopRate);
-					if (destinedTroops > 0) {
-						placeArmiesMoves.add(new PlaceArmiesMove(myName, myRegions.get(i), destinedTroops));
+					if ((armiesLeft >= destinedTroops) && (destinedTroops > 0)) {
+						placeArmiesMoves.add(new PlaceArmiesMove(myName, neighborAdvantages.get(i).getRegion(), destinedTroops));
 						armiesLeft -= destinedTroops;
 					}
 				}
@@ -175,12 +178,11 @@ public class BotStarter implements Bot {
 				negativeAdvantageOverall += neighborAdvantages.get(i).getDifference();
 			}
 
-			/* Be careful with the new troop rate! (opposite meaning with positive troopAdvantages) */
 			for (int i = 0; i < neighborAdvantages.size(); i++) {
-				troopRate = 1 - (neighborAdvantages.get(i).getDifference() / (float) negativeAdvantageOverall); 
+				troopRate = neighborAdvantages.get(i).getDifference() / ((float) negativeAdvantageOverall); 
 				destinedTroops = (int) (initialTroops * troopRate);
-				if (destinedTroops > 0) {
-					placeArmiesMoves.add(new PlaceArmiesMove(myName, myRegions.get(i), destinedTroops));
+				if ((armiesLeft >= destinedTroops) && (destinedTroops > 0)) {
+					placeArmiesMoves.add(new PlaceArmiesMove(myName, neighborAdvantages.get(i).getRegion(), destinedTroops));
 					armiesLeft -= destinedTroops;
 				}
 			}	
@@ -188,7 +190,7 @@ public class BotStarter implements Bot {
 
 		// Assign remaining troops (remainder of percentages) to our less strong region
 		if (armiesLeft > 0) {
-			placeArmiesMoves.add(new PlaceArmiesMove(myName, myRegions.get(worstDifferenceRegionIndex), armiesLeft));
+			placeArmiesMoves.add(new PlaceArmiesMove(myName, neighborAdvantages.get(0).getRegion(), armiesLeft));
 			armiesLeft -= armiesLeft;
 		}
 
@@ -207,30 +209,31 @@ public class BotStarter implements Bot {
 
 		for(Region fromRegion : state.getVisibleMap().getRegions()) {
 
-			if(fromRegion.ownedByPlayer(myName) && !isSafe(fromRegion, myName)) {
+			if(fromRegion.ownedByPlayer(myName)) {
 
 				for (Region toRegion : fromRegion.getNeighbors()) {	
 
 					// Panic mode and attacking moves
+					//					if (!toRegion.ownedByPlayer(myName) && 
+					//							toRegion.getArmies() >= (fromRegion.getArmies() * PANIC_RATE)) {
+					//
+					//						boolean escapeDestinationFound = false;
+					//						List<Region> escapeRegions = fromRegion.getNeighbors();
+					//						int i = 0;
+					//
+					//						while ((!escapeDestinationFound) && (i < escapeRegions.size())) {
+					//							/* There's a place to escape! */
+					//							if (escapeRegions.get(i).ownedByPlayer(myName)) {
+					//								attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, escapeRegions.get(i), fromRegion.getArmies()-1));
+					//								escapeDestinationFound = true;
+					//							}
+					//						}
+					//
+					//						break;
+
+					/*} else */
 					if (!toRegion.ownedByPlayer(myName) && 
-							toRegion.getArmies() >= (fromRegion.getArmies() * PANIC_RATE)) {
-
-						boolean escapeDestinationFound = false;
-						List<Region> escapeRegions = fromRegion.getNeighbors();
-						int i = 0;
-
-						while ((!escapeDestinationFound) && (i < escapeRegions.size())) {
-							/* There's a place to escape! */
-							if (escapeRegions.get(i).ownedByPlayer(myName)) {
-								attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, escapeRegions.get(i), fromRegion.getArmies()-1));
-								escapeDestinationFound = true;
-							}
-						}
-						
-						break;
-
-					} else if (!toRegion.ownedByPlayer(myName) && 
-							toRegion.getArmies() <= (fromRegion.getArmies() * SUPERIORITY_RATE)) {
+							toRegion.getArmies() <= ((int) fromRegion.getArmies() * SUPERIORITY_RATE)) {
 						attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, toRegion, (int) (fromRegion.getArmies() * ATTACK_RATE)));
 					} 
 				}				
@@ -245,20 +248,26 @@ public class BotStarter implements Bot {
 				int transferrableTroops = fromRegion.getArmies() - 1;
 				int troopChunk;
 
-				/* Only transferring troops to unsafe neighbors */
+				System.err.print(fromRegion.getId() + "-UNsafeNeighbors: ");
+
+				/* Only transferring troops to our unsafe neighbors */
 				for (Region potentialDestination : fromRegion.getNeighbors()) {
-					if (! isSafe(potentialDestination, myName)) {
+					if (potentialDestination.ownedByPlayer(myName) && ! isSafe(potentialDestination, myName)) {
 						unsafeNeighbors.add(potentialDestination);
+						System.err.print(potentialDestination.getId() + ",");
 					}
 				}
+				System.err.println();
+
 
 				// TODO We might improve this, distributing more troops to more weak endangered neighbors
 				/* Dividing equally between unsafe neighbors */
-				troopChunk = transferrableTroops / unsafeNeighbors.size();
-
-				if (troopChunk > 0) {
-					for (Region toRegion : unsafeNeighbors) {
-						attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, toRegion, troopChunk));
+				if (unsafeNeighbors.size() > 0) {	
+					troopChunk = transferrableTroops / unsafeNeighbors.size();
+					if (troopChunk > 0) {
+						for (Region toRegion : unsafeNeighbors) {
+							attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, toRegion, troopChunk));
+						}
 					}
 				}
 			}

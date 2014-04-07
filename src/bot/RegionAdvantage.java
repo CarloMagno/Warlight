@@ -10,11 +10,11 @@ public class RegionAdvantage implements Comparable<RegionAdvantage> {
 	 */
 	
 	private Region region;
-	private int maximumTroopDifference;
+	private int maxTroopDifference;
 	
 	public RegionAdvantage(Region r, int diff) {
 		region = r;
-		maximumTroopDifference = diff;
+		maxTroopDifference = diff;
 	}
 	
 	public Region getRegion() {
@@ -22,19 +22,23 @@ public class RegionAdvantage implements Comparable<RegionAdvantage> {
 	}
 	
 	public int getDifference() {
-		return maximumTroopDifference;
+		return maxTroopDifference;
 	}
 	
 	@Override
 	public int compareTo(RegionAdvantage otherRegion) {
-		if (this.maximumTroopDifference < otherRegion.getDifference()) {
+		if (this.maxTroopDifference < otherRegion.getDifference()) {
 			return -1;
-		} else if (this.maximumTroopDifference > otherRegion.getDifference()) {
+		} else if (this.maxTroopDifference > otherRegion.getDifference()) {
 			return 1;
 		} else {
 			return 0;
 		}
 	}
 	
+	@Override
+	public String toString() {
+		return region.getId() + ": " + maxTroopDifference + ";";
+	}
 
 }
