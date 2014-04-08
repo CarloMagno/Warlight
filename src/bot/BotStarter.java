@@ -377,6 +377,26 @@ public class BotStarter implements Bot {
 		return attackTransferMoves;
 	}
 
+    /**
+     * Returns the estimated attacking troops in order to conquer the enemy region
+     * with the success rate indicated.
+     * @param enemyRegion
+     * @param successRate
+     * @return
+     */
+    private int estimateAttackingTroops(Region enemyRegion, double successRate)
+    {
+        if(successRate > 1.0 || successRate < 0.0)
+            throw new IllegalArgumentException("Wrong success rate input.");
+
+        int res = 0;
+        int enemyArmies = enemyRegion.getArmies();
+
+        res = (int)Math.ceil(enemyArmies/(1.0 - successRate));
+
+        return res;
+    }
+
 	public static void main(String[] args)
 	{
 		BotParser parser = new BotParser(new BotStarter());
