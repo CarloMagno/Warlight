@@ -12,6 +12,7 @@ public class BotStarter implements Bot {
 
 	public final static double SUPERIORITY_RATE = 0.6;	
 	public final static double ATTACK_RATE = 0.7;	
+	public final static double ATTACK_NEUTRAL_RATE = 0.8;	
 	public final static double PANIC_RATE = 0.3;	
 	
 	public final static int WORLD_DOMINANCE_LIMIT = 32;
@@ -63,7 +64,7 @@ public class BotStarter implements Bot {
 	}
 
 	/**
-	 * A region is safe when no neighbor is under enemy control
+	 * A region is safe when no neighbor is under enemy/neutral control
 	 * @return True if a region is away from enemy immediate influence
 	 */
 	private boolean isSafe(Region r, String me) {
@@ -75,6 +76,25 @@ public class BotStarter implements Bot {
 
 		while ((i < neighbors.size()) && res) {
 			res = (neighbors.get(i).ownedByPlayer(me));
+			i++;
+		}
+
+		return res;		
+	}
+	
+	/**
+	 * A region is threatened when at least one neighbor is under enemy control
+	 * @return True if a region is away from enemy immediate influence
+	 */
+	private boolean isThreatened(Region r, String opponentName) {
+
+		List<Region> neighbors = r.getNeighbors();
+
+		int i = 0;
+		boolean res = false;
+
+		while ((i < neighbors.size()) && !res) {
+			res = (neighbors.get(i).ownedByPlayer(opponentName));
 			i++;
 		}
 
@@ -142,8 +162,7 @@ public class BotStarter implements Bot {
 	 * outnumbered territories. Strongest neighbor criterion.
 	 * @return The list of PlaceArmiesMoves for one round
 	 */
-	public ArrayList<PlaceArmiesMove> getPlaceArmiesMoves(BotState state, Long timeOut) 
-	{
+	public ArrayList<PlaceArmiesMove> getPlaceArmiesMoves(BotState state, Long timeOut) {
 
 		ArrayList<PlaceArmiesMove> placeArmiesMoves = new ArrayList<PlaceArmiesMove>();
 		String myName = state.getMyPlayerName();
@@ -228,6 +247,7 @@ public class BotStarter implements Bot {
 
 		ArrayList<AttackTransferMove> attackTransferMoves = new ArrayList<AttackTransferMove>();
 		String myName = state.getMyPlayerName();
+		String opponentName = state.getOpponentPlayerName();
 		List<Region> visibleRegions = state.getVisibleMap().getRegions();
 		
 		countOwnedRegions(visibleRegions, myName);
@@ -259,13 +279,18 @@ public class BotStarter implements Bot {
 			//				neighborInd++;
 			//			}
 
+			// Neutral-neighbored region (1st case) or enemy-neighbored region (2nd case) 
 			if(fromRegion.ownedByPlayer(myName)) {
 
 				for (Region toRegion : neighbors) {	
 					int neighborTroops = toRegion.getArmies();
 					int presentTroops = fromRegion.getArmies();
-					if (!toRegion.ownedByPlayer(myName) && (presentTroops > 2) && 
-							(neighborTroops < ((int) presentTroops * SUPERIORITY_RATE))) {
+					
+					if (!toRegion.ownedByPlayer(myName) && (!isThreatened(fromRegion, opponentName)) && 
+							(presentTroops > 2) && (neighborTroops < ((int) presentTroops * SUPERIORITY_RATE))) {
+						attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, toRegion, (int) (fromRegion.getArmies() * ATTACK_NEUTRAL_RATE)));
+					} else if (toRegion.ownedByPlayer(opponentName) && (isThreatened(fromRegion, opponentName)) && 
+							(presentTroops > 2) && (neighborTroops < ((int) presentTroops * SUPERIORITY_RATE))) {
 						attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, toRegion, (int) (fromRegion.getArmies() * ATTACK_RATE)));
 					} 
 				}				
@@ -282,7 +307,6 @@ public class BotStarter implements Bot {
 				}				
 			}
 
-			
 			/* Transfers from safe regions to unsafe regions */
 			if((ownedRegions < WORLD_DOMINANCE_LIMIT) && fromRegion.ownedByPlayer(myName) && isSafe(fromRegion, myName)) {
 
@@ -297,7 +321,6 @@ public class BotStarter implements Bot {
 							unsafeNeighbors.add(potentialDestination);
 						}
 					}
-
 
 					// TODO We might improve this, distributing more troops to more weak endangered neighbors
 					/* Dividing equally between unsafe neighbors */
