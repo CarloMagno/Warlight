@@ -13,11 +13,12 @@ public class BotStarter implements Bot {
 	public final static double SUPERIORITY_RATE = 0.6;	
 	public final static double ATTACK_RATE = 0.7;	
 	public final static double ATTACK_NEUTRAL_RATE = 0.8;	
-	public final static double COMBO_MIN_RATE = 0.8;
-	public final static double COMBO_ATTACK_RATE = 0.8;
+	public final static double COMBO_MIN_RATE = 0.6;
+	public final static double COMBO_ATTACK_RATE = 0.85;
+	public final static double SUCCESS_RATE = 0.7;
 
 	public final static int WORLD_DOMINANCE_LIMIT = 30;
-	public final static int COMBO_MIN_TROOPS = 12;
+	public final static int COMBO_MIN_TROOPS = 10;
 
 	private static int ownedRegions;
 	private static String myName = "";
@@ -135,19 +136,36 @@ public class BotStarter implements Bot {
 		int originTroops = origin.getArmies();
 		boolean res = false;
 
-		if (targetNeighbors.contains(origin) && (originTroops > COMBO_MIN_TROOPS) &&
-				(targetTroops <= ((int) originTroops * COMBO_MIN_RATE))) {
+		if (targetNeighbors.contains(origin) && (originTroops >= COMBO_MIN_TROOPS) &&
+				(targetTroops <= originTroops)) {
 			while ((i < targetNeighbors.size()) && !res) {
 				comboPartnerRegion = targetNeighbors.get(i);
 				comboPartnerTroops  = comboPartnerRegion.getArmies();
 				res = (!origin.equals(comboPartnerRegion)) && (comboPartnerRegion.ownedByPlayer(myName)) && 
-						(comboPartnerTroops > COMBO_MIN_TROOPS) && 
-						(targetTroops <= ((int) comboPartnerTroops * COMBO_MIN_RATE));
+						(comboPartnerTroops >= COMBO_MIN_TROOPS) && 
+						(targetTroops <= comboPartnerTroops);
 				i++;
 			}
 		}
 
 		return res;	
+	}
+	
+
+	/**
+	 * Returns the estimated attacking troops in order to conquer the enemy region
+	 * with the indicated success rate .
+	 * @param enemyRegion
+	 * @return
+	 */
+	private int estimateAttackingTroops(Region enemyRegion) {
+
+		int res = 0;
+		int enemyArmies = enemyRegion.getArmies();
+
+		res = (int)Math.ceil(enemyArmies/(1.0 - SUCCESS_RATE));
+
+		return res;
 	}
 
 
@@ -247,13 +265,15 @@ public class BotStarter implements Bot {
 	public ArrayList<AttackTransferMove> getAttackTransferMoves(BotState state, Long timeOut) {
 
 		ArrayList<AttackTransferMove> attackTransferMoves = new ArrayList<AttackTransferMove>();
+
 		int newOwnedRegionCount = 0;
-		
+		int presentTroops, neighborTroops, attackEstimation, comboEstimation, neutralAttackEstimation;
+		 
+
 		for(Region fromRegion : visibleRegions) {
 
 			List<Region> neighbors = fromRegion.getNeighbors();
 			List<Region> unsafeNeighbors = new ArrayList<Region>();
-			int presentTroops;
 
 			// Neutral-neighbored region (1st case) or enemy-neighbored region (2nd case) 
 			if(fromRegion.ownedByPlayer(myName)) {
@@ -262,24 +282,42 @@ public class BotStarter implements Bot {
 				presentTroops = fromRegion.getArmies();
 				
 				for (Region toRegion : neighbors) {	
-					int neighborTroops = toRegion.getArmies();
+					neighborTroops = toRegion.getArmies();
+					attackEstimation = estimateAttackingTroops(toRegion);
 
 					if (toRegion.ownedByPlayer(myName) && ! isSafe(toRegion, myName)) {
 						unsafeNeighbors.add(toRegion);
 					}
 					
+//					if (toRegion.ownedByPlayer(opponentName) && comboAttackChance(myName, fromRegion, toRegion)) {
+//						attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, toRegion, (int) (presentTroops * COMBO_ATTACK_RATE)));
+//						presentTroops -= (int) (presentTroops * COMBO_ATTACK_RATE);
+//					} else if (!toRegion.ownedByPlayer(myName) && (! isThreatened(fromRegion,opponentName)) && 
+//							(presentTroops > 2) && (neighborTroops < ((int) presentTroops * SUPERIORITY_RATE))) {
+//						attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, toRegion, (int) (presentTroops * ATTACK_NEUTRAL_RATE)));
+//						presentTroops -= (int) (presentTroops * ATTACK_NEUTRAL_RATE);
+//					} else if (toRegion.ownedByPlayer(opponentName) && (isThreatened(fromRegion, opponentName)) && 
+//							(presentTroops > 2) && (neighborTroops < ((int) presentTroops * SUPERIORITY_RATE))) {
+//						attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, toRegion, (int) (presentTroops * ATTACK_RATE)));
+//						presentTroops -= (int) (presentTroops * ATTACK_RATE);
+//					} 
+					
+					comboEstimation = (int) (presentTroops * COMBO_ATTACK_RATE);
+					neutralAttackEstimation = presentTroops - 1;
+					
 					if (toRegion.ownedByPlayer(opponentName) && comboAttackChance(myName, fromRegion, toRegion)) {
-						attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, toRegion, (int) (presentTroops * COMBO_ATTACK_RATE)));
-						presentTroops -= (int) (presentTroops * COMBO_ATTACK_RATE);
+						attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, toRegion, comboEstimation));
+						presentTroops -= comboEstimation;
+					} else if (toRegion.ownedByPlayer(opponentName) && (isThreatened(fromRegion, opponentName)) && 
+							(presentTroops > attackEstimation)) {
+						attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, toRegion, attackEstimation));
+						presentTroops -= attackEstimation;
 					} else if (!toRegion.ownedByPlayer(myName) && (! isThreatened(fromRegion,opponentName)) && 
 							(presentTroops > 2) && (neighborTroops < ((int) presentTroops * SUPERIORITY_RATE))) {
-						attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, toRegion, (int) (presentTroops * ATTACK_NEUTRAL_RATE)));
-						presentTroops -= (int) (presentTroops * ATTACK_NEUTRAL_RATE);
-					} else if (toRegion.ownedByPlayer(opponentName) && (isThreatened(fromRegion, opponentName)) && 
-							(presentTroops > 2) && (neighborTroops < ((int) presentTroops * SUPERIORITY_RATE))) {
-						attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, toRegion, (int) (presentTroops * ATTACK_RATE)));
-						presentTroops -= (int) (presentTroops * ATTACK_RATE);
-					} 
+						attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, toRegion, neutralAttackEstimation));
+						presentTroops -= neutralAttackEstimation;
+					}
+					
 				}				
 			}
 
