@@ -114,42 +114,5 @@ public class Region {
 			return playerName;
 	}
 	
-	/**
-	 * A region is safe when no neighbor is under enemy/neutral control
-	 * @return True if a region is away from enemy/neutral immediate influence
-	 */
-	public boolean isSafe() {
-
-		List<Region> neighbors = this.getNeighbors();
-
-		int i = 0;
-		boolean res = true;
-
-		while ((i < neighbors.size()) && res) {
-			res = (neighbors.get(i).ownedByPlayer(playerName));
-			i++;
-		}
-
-		return res;		
-	}
-	
-	/**
-	 * A region is threatened when at least one neighbor is under enemy control
-	 * @return True if a region is away from enemy immediate influence
-	 */
-	public boolean isThreatened(String opponentName) {
-
-		List<Region> neighbors = this.getNeighbors();
-
-		int i = 0;
-		boolean res = false;
-
-		while ((i < neighbors.size()) && !res) {
-			res = (neighbors.get(i).ownedByPlayer(opponentName));
-			i++;
-		}
-
-		return res;		
-	}
 
 }

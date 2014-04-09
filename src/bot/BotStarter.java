@@ -6,6 +6,7 @@ import java.util.List;
 
 import main.Region;
 import move.AttackTransferMove;
+import move.Move;
 import move.PlaceArmiesMove;
 
 public class BotStarter implements Bot {
@@ -15,7 +16,8 @@ public class BotStarter implements Bot {
 	public final static double ATTACK_NEUTRAL_RATE = 0.8;	
 	public final static double COMBO_MIN_RATE = 0.8;
 	public final static double COMBO_ATTACK_RATE = 0.8;
-	public final static double PANIC_RATE = 0.3;	
+	public final static double PANIC_RATE = 0.5;
+	public final static double SUCCESS_RATE = 0.7;
 
 	public final static int WORLD_DOMINANCE_LIMIT = 30;
 	public final static int SUPERPOWER_TROOP_LIMIT = 100;
@@ -66,39 +68,55 @@ public class BotStarter implements Bot {
 		return preferredStartingRegions;
 	}
 
-//	/**
-//	 * A region is safe when no neighbor is under enemy/neutral control
-//	 * @return True if a region is away from enemy/neutral immediate influence
-//	 */
-//	private boolean isSafe(Region r, String me) {
-//
-//		List<Region> neighbors = r.getNeighbors();
-//
-//		int i = 0;
-//		boolean res = true;
-//
-//		while ((i < neighbors.size()) && res) {
-//			res = (neighbors.get(i).ownedByPlayer(me));
-//			i++;
-//		}
-//
-//		return res;		
-//	}
+	/**
+	 * A region is safe when no neighbor is under enemy/neutral control
+	 * @return True if a region is away from enemy/neutral immediate influence
+	 */
+	private boolean isSafe(Region r, String me) {
 
-//	/**
-//	 * A region is threatened when at least one neighbor is under enemy control
-//	 * @return True if a region is away from enemy immediate influence
-//	 */
-//	private boolean isThreatened(Region r, String opponentName) {
+		List<Region> neighbors = r.getNeighbors();
+
+		int i = 0;
+		boolean res = true;
+
+		while ((i < neighbors.size()) && res) {
+			res = (neighbors.get(i).ownedByPlayer(me));
+			i++;
+		}
+
+		return res;		
+	}
+
+	/**
+	 * A region is threatened when at least one neighbor is under enemy control
+	 * @return True if a region is away from enemy immediate influence
+	 */
+	private boolean isThreatened(Region r, String opponentName) {
+
+		List<Region> neighbors = r.getNeighbors();
+
+		int i = 0;
+		boolean res = false;
+
+		while ((i < neighbors.size()) && !res) {
+			res = (neighbors.get(i).ownedByPlayer(opponentName));
+			i++;
+		}
+
+		return res;		
+	}
+
+//	private int getMaximumThreat(Region r, String opponentName) {
 //
 //		List<Region> neighbors = r.getNeighbors();
 //
 //		int i = 0;
-//		boolean res = false;
+//		int res = 0;
 //
-//		while ((i < neighbors.size()) && !res) {
-//			res = (neighbors.get(i).ownedByPlayer(opponentName));
-//			i++;
+//		for (Region neighbor : neighbors) {
+//			if (neighbor.ownedByPlayer(opponentName)) {
+//				res = (res > neighbor.getArmies()) ? neighbor.getArmies() : res;	
+//			}
 //		}
 //
 //		return res;		
@@ -144,21 +162,6 @@ public class BotStarter implements Bot {
 		ownedRegions = ownedRegionCount;
 	}
 
-	/* Combo attacks cover this case */
-	//	private boolean havePowerfulNeighbor(Region r, String myName) {
-	//		List<Region> neighbors = r.getNeighbors();
-	//
-	//		int i = 0;
-	//		boolean res = false;
-	//
-	//		while ((i < neighbors.size()) && !res) {
-	//			res = (neighbors.get(i).ownedByPlayer(myName) && (neighbors.get(i).getArmies() > SUPERPOWER_TROOP_LIMIT));
-	//			i++;
-	//		}
-	//
-	//		return res;	
-	//	}
-
 	private boolean comboAttackChance(String myName, Region origin, Region target) {
 
 		List<Region> targetNeighbors = target.getNeighbors();
@@ -169,14 +172,14 @@ public class BotStarter implements Bot {
 		int originTroops = origin.getArmies();
 		boolean res = false;
 
-		if (targetNeighbors.contains(origin) && (originTroops > COMBO_MIN_TROOPS) &&
-				(targetTroops <= ((int) originTroops * COMBO_MIN_RATE))) {
+		if ((originTroops > COMBO_MIN_TROOPS) && (targetTroops <= originTroops) && 
+				targetNeighbors.contains(origin)) {
 			while ((i < targetNeighbors.size()) && !res) {
 				comboPartnerRegion = targetNeighbors.get(i);
 				comboPartnerTroops  = comboPartnerRegion.getArmies();
 				res = (!origin.equals(comboPartnerRegion)) && (comboPartnerRegion.ownedByPlayer(myName)) && 
 						(comboPartnerTroops > COMBO_MIN_TROOPS) && 
-						(targetTroops <= ((int) comboPartnerTroops * COMBO_MIN_RATE));
+						(targetTroops <= comboPartnerTroops);
 				i++;
 			}
 		}
@@ -184,6 +187,48 @@ public class BotStarter implements Bot {
 		return res;	
 	}
 
+	/**
+	 * Returns the estimated attacking troops in order to conquer the enemy region
+	 * with the indicated success rate .
+	 * @param enemyRegion
+	 * @return
+	 */
+	private int estimateAttackingTroops(Region enemyRegion) {
+
+		int res = 0;
+		int enemyArmies = enemyRegion.getArmies();
+
+		res = (int)Math.ceil(enemyArmies/(1.0 - SUCCESS_RATE));
+
+		return res;
+	}
+
+	/**
+	 * Executes the great escape... when it can be done
+	 * @param region Endangered region from which soldiers are escaping
+	 * @param neighbors List of potential destinations (regions)
+	 * @param attackTransferMoves List of moves to be modified in case that
+	 * 		  the escape is feasible
+	 */
+//	private void prepareEscape(Region region, List<Region> neighbors,
+//			ArrayList<AttackTransferMove> attackTransferMoves) {
+//
+//		int i = 0;
+//		String me = region.getPlayerName();
+//		int escapingTroops = region.getArmies()-1;
+//		boolean escapeDestinationFound = false;
+//
+//		while ((i < neighbors.size()) && !escapeDestinationFound) {
+//			/* There's a place to escape! */
+//			if (neighbors.get(i).ownedByPlayer(me) && isSafe(neighbors.get(i), me)) {
+//				attackTransferMoves.add(new AttackTransferMove(me, region, neighbors.get(i), escapingTroops));
+//				escapeDestinationFound = true;
+//			} else {
+//				i++;
+//			}
+//		}
+//
+//	}
 
 	@Override
 	/**
@@ -201,7 +246,7 @@ public class BotStarter implements Bot {
 		List<Region> fortifiableRegions = new ArrayList<Region>();
 
 		for (Region r : visibleRegions) {
-			if (r.ownedByPlayer(myName) && !r.isSafe()) {
+			if (r.ownedByPlayer(myName) && !isSafe(r,myName)) {
 				fortifiableRegions.add(r);
 			}
 		}
@@ -277,130 +322,85 @@ public class BotStarter implements Bot {
 		ArrayList<AttackTransferMove> attackTransferMoves = new ArrayList<AttackTransferMove>();
 		String myName = state.getMyPlayerName();
 		String opponentName = state.getOpponentPlayerName();
-		List<Region> visibleRegions = state.getVisibleMap().getRegions();
 
+		List<Region> visibleRegions = state.getVisibleMap().getRegions();	
 		countOwnedRegions(visibleRegions, myName);
 
-		for(Region fromRegion : state.getVisibleMap().getRegions()) {
+		int presentTroops, neighborTroops, attackEstimation; 
+		List<Region> neighbors;
+		
+		for(Region fromRegion : visibleRegions) {
 
-			// TODO Panic mode and attacking moves
-			List<Region> neighbors = fromRegion.getNeighbors();
+			neighbors = fromRegion.getNeighbors();
 
-			//			int neighborInd = 0, i = 0;
-			//			boolean escapeDestinationFound = false;
-			//
-			//			while (!escapeDestinationFound && (neighborInd < neighbors.size())) {
-			//				Region inspectedNeighbor = neighbors.get(neighborInd);
-			//				if (!inspectedNeighbor.ownedByPlayer(myName) &&	
-			//						fromRegion.getArmies() <= ((int) Math.ceil((inspectedNeighbor.getArmies() * PANIC_RATE)))) {
-			//
-			//					List<Region> escapeRegions = fromRegion.getNeighbors();
-			//					i = 0;
-			//
-			//					while ((!escapeDestinationFound) && (i < escapeRegions.size())) {
-			//						/* There's a place to escape! */
-			//						if (escapeRegions.get(i).ownedByPlayer(myName)) {
-			//							attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, escapeRegions.get(i), fromRegion.getArmies()-1));
-			//							escapeDestinationFound = true;
-			//						}
-			//					}
-			//				}
-			//				neighborInd++;
-			//			}
-
-			// Neutral-neighbored region (1st case) or enemy-neighbored region (2nd case) 
 			if(fromRegion.ownedByPlayer(myName)) {
 
+				presentTroops = fromRegion.getArmies();
+
 				for (Region toRegion : neighbors) {	
-					int neighborTroops = toRegion.getArmies();
-					int presentTroops = fromRegion.getArmies();
+					
+					neighborTroops = toRegion.getArmies();
+					attackEstimation = estimateAttackingTroops(toRegion);
 
 					if (toRegion.ownedByPlayer(opponentName) && comboAttackChance(myName, fromRegion, toRegion)) {
-						attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, toRegion, (int) (fromRegion.getArmies() * COMBO_ATTACK_RATE)));
-					} else if (!toRegion.ownedByPlayer(myName) && (!fromRegion.isThreatened(opponentName)) && 
+						attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, toRegion, (int) (presentTroops * COMBO_ATTACK_RATE)));
+						presentTroops -= (int) (presentTroops * COMBO_ATTACK_RATE);
+					} else if (toRegion.ownedByPlayer(opponentName) && (isThreatened(fromRegion, opponentName)) && 
+							(((int) (ATTACK_RATE * presentTroops)) > attackEstimation)) {
+						attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, toRegion, attackEstimation));
+						presentTroops -= attackEstimation;
+					} else if (!toRegion.ownedByPlayer(myName) && (! isThreatened(fromRegion,opponentName)) && 
 							(presentTroops > 2) && (neighborTroops < ((int) presentTroops * SUPERIORITY_RATE))) {
-						attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, toRegion, (int) (fromRegion.getArmies() * ATTACK_NEUTRAL_RATE)));
-					} else if (toRegion.ownedByPlayer(opponentName) && (fromRegion.isThreatened(opponentName)) && 
-							(presentTroops > 2) && (neighborTroops < ((int) presentTroops * SUPERIORITY_RATE))) {
-						attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, toRegion, (int) (fromRegion.getArmies() * ATTACK_RATE)));
-					} 
-				}				
+						attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, toRegion, (int) (presentTroops * ATTACK_NEUTRAL_RATE)));
+						presentTroops -= (int) (presentTroops * ATTACK_NEUTRAL_RATE);
+					}
+				//}	
 			}
+		}
 
-			// Kamikaze attack to destroy enemy strong defenses (Combo attacks cover this case)
-			//			if(fromRegion.ownedByPlayer(myName) && (fromRegion.getArmies() > SUPERPOWER_TROOP_LIMIT)) {
-			//
-			//				for (Region toRegion : neighbors) {	
-			//					if (!toRegion.ownedByPlayer(myName) && 
-			//							(toRegion.getArmies() > SUPERPOWER_TROOP_LIMIT) && havePowerfulNeighbor(fromRegion, myName)) {
-			//						attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, toRegion, fromRegion.getArmies()-1));
-			//					} 
-			//				}				
-			//			}
+		/* Transfers from safe regions to unsafe regions */
+		if((ownedRegions < WORLD_DOMINANCE_LIMIT) && isSafe(fromRegion, myName)) {
 
-			/* Transfers from safe regions to unsafe regions */
-			if((ownedRegions < WORLD_DOMINANCE_LIMIT) && fromRegion.ownedByPlayer(myName) && fromRegion.isSafe()) {
+			List<Region> unsafeNeighbors = new ArrayList<Region>();
+			int transferrableTroops = fromRegion.getArmies() - 1;
+			int troopChunk;
 
-				List<Region> unsafeNeighbors = new ArrayList<Region>();
-				int transferrableTroops = fromRegion.getArmies() - 1;
-				int troopChunk;
+			if (transferrableTroops > 0) {
+				/* Only transferring troops to our unsafe neighbors */
+				for (Region potentialDestination : neighbors) {
+					if (potentialDestination.ownedByPlayer(myName) && ! isSafe(potentialDestination, myName)) {
+						unsafeNeighbors.add(potentialDestination);
+					}
+				}
 
-				if (transferrableTroops > 0) {
-					/* Only transferring troops to our unsafe neighbors */
-					for (Region potentialDestination : neighbors) {
-						if (potentialDestination.ownedByPlayer(myName) && !potentialDestination.isSafe()) {
-							unsafeNeighbors.add(potentialDestination);
+				// TODO We might improve this, distributing more troops to more weak endangered neighbors
+				/* Dividing equally between unsafe neighbors */
+				if ((unsafeNeighbors.size() > 0)) {	
+					troopChunk = (int) (transferrableTroops / unsafeNeighbors.size());
+					if (troopChunk > 0) {
+						for (Region toRegion : unsafeNeighbors) {
+							attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, toRegion, troopChunk));
 						}
 					}
-
-					// TODO We might improve this, distributing more troops to more weak endangered neighbors
-					/* Dividing equally between unsafe neighbors */
-					if ((unsafeNeighbors.size() > 0)) {	
-						troopChunk = (int) (transferrableTroops / unsafeNeighbors.size());
-						if (troopChunk > 0) {
-							for (Region toRegion : unsafeNeighbors) {
-								attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, toRegion, troopChunk));
-							}
-						}
-					} else if (unsafeNeighbors.size() == 0) {
-						troopChunk = (int) (transferrableTroops / neighbors.size());
-						if (troopChunk > 0) {
-							for (Region toRegion : neighbors) {
-								attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, toRegion, troopChunk));
-							}
+				} else {
+					troopChunk = (int) (transferrableTroops / neighbors.size());
+					if (troopChunk > 0) {
+						for (Region toRegion : neighbors) {
+							attackTransferMoves.add(new AttackTransferMove(myName, fromRegion, toRegion, troopChunk));
 						}
 					}
 				}
 			}
 		}
-
-		return attackTransferMoves;
 	}
 
-    /**
-     * Returns the estimated attacking troops in order to conquer the enemy region
-     * with the success rate indicated.
-     * @param enemyRegion
-     * @param successRate
-     * @return
-     */
-    private int estimateAttackingTroops(Region enemyRegion, double successRate)
-    {
-        if(successRate > 1.0 || successRate < 0.0)
-            throw new IllegalArgumentException("Wrong success rate input.");
+	return attackTransferMoves;
+}
 
-        int res = 0;
-        int enemyArmies = enemyRegion.getArmies();
-
-        res = (int)Math.ceil(enemyArmies/(1.0 - successRate));
-
-        return res;
-    }
-
-	public static void main(String[] args)
-	{
-		BotParser parser = new BotParser(new BotStarter());
-		parser.run();
-	}
+public static void main(String[] args)
+{
+	BotParser parser = new BotParser(new BotStarter());
+	parser.run();
+}
 
 }
