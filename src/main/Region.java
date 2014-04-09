@@ -113,6 +113,5 @@ public class Region {
 	public String getPlayerName() {
 			return playerName;
 	}
-	
 
 }
